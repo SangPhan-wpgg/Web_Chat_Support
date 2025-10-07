@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <title>Chat Support</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f7f9;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    #chat-container {
+      width: 400px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #chat-header {
+      background: #0078d7;
+      color: #fff;
+      padding: 12px;
+      font-weight: bold;
+    }
+    #chat-box {
+      flex: 1;
+      padding: 10px;
+      overflow-y: auto;
+      background: #eef1f5;
+    }
+    .msg {
+      margin: 6px 0;
+      max-width: 70%;
+      padding: 8px 12px;
+      border-radius: 12px;
+      word-wrap: break-word;
+      clear: both;
+    }
+    .mine {
+      background: #0078d7;
+      color: #fff;
+      float: right;
+      border-bottom-right-radius: 2px;
+    }
+    .other {
+      background: #e0e0e0;
+      float: left;
+      border-bottom-left-radius: 2px;
+    }
+    #chat-input {
+      display: flex;
+      border-top: 1px solid #ccc;
+    }
+    #msg {
+      flex: 1;
+      border: none;
+      padding: 10px;
+      font-size: 14px;
+    }
+    #sendBtn {
+      background: #0078d7;
+      color: white;
+      border: none;
+      padding: 0 20px;
+      cursor: pointer;
+    }
+    #login {
+      padding: 20px;
+      text-align: center;
+    }
+    #login input {
+      margin: 6px;
+      padding: 8px;
+    }
+    #connectBtn {
+      padding: 8px 16px;
+      background: #0078d7;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+<div id="chat-container">
+  <div id="chat-header">Chat Support</div>
+  
+  <div id="login">
+    <input id="username" placeholder="Your name">
+    <input id="roomId" placeholder="Room id">
+    <button id="connectBtn" onclick="connect()">Connect</button>
+  </div>
+
+  <div id="chat-box" style="display:none"></div>
+
+  <div id="chat-input" style="display:none">
+    <input id="msg" placeholder="Type a message...">
+    <button id="sendBtn" onclick="sendMsg()">Send</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/stompjs/lib/stomp.min.js"></script>
+<script>
+  let stomp, user, room;
+
+  function connect() {
+    user = document.getElementById("username").value;
+    room = document.getElementById("roomId").value;
+    if (!user || !room) {
+      alert("Please enter your name and room ID!");
+      return;
+    }
+
+    // Ẩn form login, hiện chat box
+    document.getElementById("login").style.display = "none";
+    document.getElementById("chat-box").style.display = "block";
+    document.getElementById("chat-input").style.display = "flex";
+
+    // Load lịch sử từ REST API
+    fetch("/api/messages/" + room)
+      .then(res => res.json())
+      .then(list => {
+        list.forEach(m => addMessage(m.sender, m.content));
+      });
+
+    // Kết nối WebSocket
+    let socket = new SockJS("/ws");
+    stomp = Stomp.over(socket);
+    stomp.connect({}, () => {
+      stomp.subscribe("/topic/room." + room, msg => {
+        let m = JSON.parse(msg.body);
+        addMessage(m.from, m.content);
+      });
+      stomp.send("/app/support.join", {}, JSON.stringify({type:"JOIN", roomId:room, from:user}));
+    });
+  }
+
+  function sendMsg() {
+    let text = document.getElementById("msg").value.trim();
+    if (!text) return;
+    stomp.send("/app/support.send", {}, JSON.stringify({
+      type:"CHAT",
+      roomId:room,
+      from:user,
+      content:text
+    }));
+    document.getElementById("msg").value="";
+  }
+
+  function addMessage(sender, content) {
+    let div = document.createElement("div");
+    div.className = "msg " + (sender === user ? "mine" : "other");
+    div.textContent = sender + ": " + content;
+    document.getElementById("chat-box").appendChild(div);
+    document.getElementById("chat-box").scrollTop = document.getElementById("chat-box").scrollHeight;
+  }
+</script>
+</body>
+</html>
